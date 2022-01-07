@@ -2,7 +2,11 @@ package tf5server
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path"
 	"sync"
+	"time"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
@@ -10,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5/internal/fromproto"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5/internal/tfplugin5"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5/internal/toproto"
+	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 )
 
 // ServeOpt is an interface for defining options that can be passed to the
@@ -307,15 +312,21 @@ func (s *server) ReadResource(ctx context.Context, req *tfplugin5.ReadResource_R
 }
 
 func (s *server) PlanResourceChange(ctx context.Context, req *tfplugin5.PlanResourceChange_Request) (*tfplugin5.PlanResourceChange_Response, error) {
+	rpc := "PlanResourceChange"
 	ctx = s.stoppableContext(ctx)
 	r, err := fromproto.PlanResourceChangeRequest(req)
 	if err != nil {
 		return nil, err
 	}
+	ProtocolData(ctx, os.Getenv("TF_LOG_SDK_PROTO_DATA_DIR"), rpc, "Request", "Config", r.Config)
+	ProtocolData(ctx, os.Getenv("TF_LOG_SDK_PROTO_DATA_DIR"), rpc, "Request", "PriorState", r.PriorState)
+	ProtocolData(ctx, os.Getenv("TF_LOG_SDK_PROTO_DATA_DIR"), rpc, "Request", "ProposedNewState", r.ProposedNewState)
+	ProtocolData(ctx, os.Getenv("TF_LOG_SDK_PROTO_DATA_DIR"), rpc, "Request", "ProviderMeta", r.ProviderMeta)
 	resp, err := s.downstream.PlanResourceChange(ctx, r)
 	if err != nil {
 		return nil, err
 	}
+	ProtocolData(ctx, os.Getenv("TF_LOG_SDK_PROTO_DATA_DIR"), rpc, "Response", "PlannedState", resp.PlannedState)
 	ret, err := toproto.PlanResourceChange_Response(resp)
 	if err != nil {
 		return nil, err
@@ -355,4 +366,98 @@ func (s *server) ImportResourceState(ctx context.Context, req *tfplugin5.ImportR
 		return nil, err
 	}
 	return ret, nil
+}
+
+const (
+	// fileExtEmpty is the file extension for empty data.
+	// Empty data may be expected, depending on the RPC.
+	fileExtEmpty = "empty"
+
+	// fileExtJson is the file extension for JSON data.
+	fileExtJson = "json"
+
+	// fileExtMsgpack is the file extension for MessagePack data.
+	fileExtMsgpack = "msgpack"
+)
+
+//var protocolDataSkippedLog sync.Once
+
+// ProtocolData emits raw protocol data to a file, if given a directory.
+//
+// The directory must exist and be writable, prior to invoking this function.
+//
+// File names are in the format: {TIME}_{RPC}_{MESSAGE}_{FIELD}.{EXT}
+func ProtocolData(ctx context.Context, dataDir string, rpc string, message string, field string, data interface{}) {
+	if dataDir == "" {
+		// Write a log, only once, that explains how to enable this functionality.
+		// protocolDataSkippedLog.Do(func() {
+		// 	ProtocolTrace(ctx, "Skipping protocol data file writing because no data directory is set. "+
+		// 		fmt.Sprintf("Use the %s environment variable to enable this functionality.", EnvTfLogSdkProtoDataDir))
+		// })
+
+		return
+	}
+
+	var fileContents []byte
+	var fileExtension string
+
+	switch data := data.(type) {
+	case *tfprotov5.DynamicValue:
+		fileExtension, fileContents = protocolDataDynamicValue5(ctx, data)
+	case *tfprotov6.DynamicValue:
+		fileExtension, fileContents = protocolDataDynamicValue6(ctx, data)
+	default:
+		//ProtocolError(ctx, fmt.Sprintf("Skipping unknown protocol data type: %T", data))
+		return
+	}
+
+	fileName := fmt.Sprintf("%d_%s_%s_%s.%s", time.Now().Unix(), rpc, message, field, fileExtension)
+	filePath := path.Join(dataDir, fileName)
+
+	//ProtocolTrace(ctx, "Writing protocol data file", KeyProtocolDataFile, filePath)
+
+	err := os.WriteFile(filePath, fileContents, 0644)
+
+	if err != nil {
+		//ProtocolError(ctx, fmt.Sprintf("Unable to write protocol data file: %s", err), KeyProtocolDataFile, filePath)
+		return
+	}
+
+	//ProtocolTrace(ctx, "Wrote protocol data file", KeyProtocolDataFile, filePath)
+}
+
+func protocolDataDynamicValue5(ctx context.Context, value *tfprotov5.DynamicValue) (string, []byte) {
+	if value == nil {
+		return fileExtEmpty, nil
+	}
+
+	// (tfprotov5.DynamicValue).Unmarshal() prefers JSON first, so prefer to
+	// output JSON if found.
+	if len(value.JSON) > 0 {
+		return fileExtJson, value.JSON
+	}
+
+	if len(value.MsgPack) > 0 {
+		return fileExtMsgpack, value.MsgPack
+	}
+
+	return fileExtEmpty, nil
+}
+
+func protocolDataDynamicValue6(ctx context.Context, value *tfprotov6.DynamicValue) (string, []byte) {
+	if value == nil {
+		return fileExtEmpty, nil
+	}
+
+	// (tfprotov6.DynamicValue).Unmarshal() prefers JSON first, so prefer to
+	// output JSON if found.
+	if len(value.JSON) > 0 {
+		return fileExtJson, value.JSON
+	}
+
+	if len(value.MsgPack) > 0 {
+		return fileExtMsgpack, value.MsgPack
+	}
+
+	return fileExtEmpty, nil
 }
