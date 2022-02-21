@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-go/internal/logging"
+	"github.com/hashicorp/terraform-plugin-go/tfplugin5"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5/internal/fromproto"
-	"github.com/hashicorp/terraform-plugin-go/tfprotov5/internal/tfplugin5"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5/internal/toproto"
 	"google.golang.org/grpc"
 

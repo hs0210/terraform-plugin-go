@@ -3,8 +3,8 @@ package toproto
 import (
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-go/tfplugin5"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
-	"github.com/hashicorp/terraform-plugin-go/tfprotov5/internal/tfplugin5"
 )
 
 func GetProviderSchema_Request(in *tfprotov5.GetProviderSchemaRequest) (*tfplugin5.GetProviderSchema_Request, error) {

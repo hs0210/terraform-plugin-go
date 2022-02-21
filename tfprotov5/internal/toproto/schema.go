@@ -3,8 +3,8 @@ package toproto
 import (
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-go/tfplugin5"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
-	"github.com/hashicorp/terraform-plugin-go/tfprotov5/internal/tfplugin5"
 )
 
 func Schema(in *tfprotov5.Schema) (*tfplugin5.Schema, error) {

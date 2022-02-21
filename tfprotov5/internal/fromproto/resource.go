@@ -3,8 +3,8 @@ package fromproto
 import (
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-go/tfplugin5"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
-	"github.com/hashicorp/terraform-plugin-go/tfprotov5/internal/tfplugin5"
 )
 
 func ValidateResourceTypeConfigRequest(in *tfplugin5.ValidateResourceTypeConfig_Request) (*tfprotov5.ValidateResourceTypeConfigRequest, error) {
